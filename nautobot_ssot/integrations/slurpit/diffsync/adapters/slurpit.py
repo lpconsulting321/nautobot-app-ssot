@@ -245,13 +245,14 @@ class SlurpitAdapter(Adapter):
         for site in sites:
             try:
                 address = [site.number, site.street, site.city, site.state, site.country, site.county, site.zipcode]
+                safe_address = [part if part is not None else "" for part in address]
                 data = {
                     "name": site.sitename,
                     "description": site.description,
                     "latitude": format_latitude(site.latitude) if site.latitude else None,
                     "longitude": format_latitude(site.longitude) if site.longitude else None,
                     "contact_phone": site.phonenumber,
-                    "physical_address": "\n".join(address),
+                    "physical_address": "\n".join(safe_address),
                     "location_type__name": self.job.site_loctype.name,
                     "status__name": "Active",
                     "tags": [{"name": "SSoT Synced from Slurpit"}],
