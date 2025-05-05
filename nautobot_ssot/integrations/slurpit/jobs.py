@@ -4,7 +4,6 @@
 from ast import literal_eval
 
 import slurpit
-from diffsync.enum import DiffSyncFlags
 from django.contrib.contenttypes.models import ContentType
 from django.templatetags.static import static
 from django.urls import reverse
@@ -67,6 +66,20 @@ class SlurpitDataSource(DataSource, Job):  # pylint: disable=too-many-instance-a
         default=[],
         required=False,
     )
+
+    delete_location = BooleanVar(description="Delete locations from Nautobot if not present in Slurpit")
+    delete_manufacturer = BooleanVar(description="Delete manufacturers from Nautobot if not present in Slurpit")
+    delete_device_type = BooleanVar(description="Delete device types from Nautobot if not present in Slurpit")
+    delete_platform = BooleanVar(description="Delete platforms from Nautobot if not present in Slurpit")
+    delete_role = BooleanVar(description="Delete roles from Nautobot if not present in Slurpit")
+    delete_device = BooleanVar(description="Delete devices from Nautobot if not present in Slurpit")
+    delete_inventory_item = BooleanVar(description="Delete inventory items from Nautobot if not present in Slurpit")
+    delete_vlan = BooleanVar(description="Delete VLANs from Nautobot if not present in Slurpit")
+    delete_vrf = BooleanVar(description="Delete VRFs from Nautobot if not present in Slurpit")
+    delete_prefix = BooleanVar(description="Delete prefixes from Nautobot if not present in Slurpit")
+    delete_ipaddress = BooleanVar(description="Delete IP addresses from Nautobot if not present in Slurpit")
+    delete_interface = BooleanVar(description="Delete interfaces from Nautobot if not present in Slurpit")
+    delete_ipassignment = BooleanVar(description="Delete IP assignments from Nautobot if not present in Slurpit")
 
     kwargs = {}
 
@@ -148,8 +161,10 @@ class SlurpitDataSource(DataSource, Job):  # pylint: disable=too-many-instance-a
             self.namespace = Namespace.objects.get(name="Global")
         self.ignore_prefixes = ignore_prefixes
         self.site_mapping = literal_eval(site_filter)
-
-        self.diffsync_flags |= DiffSyncFlags.SKIP_UNMATCHED_DST
+        self.delete_records = {}
+        for k, v in kwargs.items():
+            if k.startswith("delete_"):
+                self.delete_records[k[7:]] = v
 
         self.kwargs = {
             "sync_slurpit_tagged_only": sync_slurpit_tagged_only,

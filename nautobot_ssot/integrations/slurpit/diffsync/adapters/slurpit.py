@@ -8,6 +8,7 @@ from datetime import datetime
 from decimal import Decimal, InvalidOperation
 
 from diffsync import Adapter
+from diffsync.enum import DiffSyncModelFlags
 from diffsync.exceptions import ObjectAlreadyExists, ObjectNotFound
 from django.core.exceptions import ObjectDoesNotExist
 from nautobot.dcim.models import LocationType
@@ -259,10 +260,10 @@ class SlurpitAdapter(Adapter):
                     "system_of_record": "Slurpit",
                     "last_synced_from_sor": datetime.today().date().isoformat(),
                 }
-                location = self.location(**data)
-                self.add(location)
+                location_model = self.add_flags(self.location(**data))
+                self.add(location_model)
             except ObjectAlreadyExists as err:
-                self.job.logger.warning(f"Duplicate location {location.name}. {err}")
+                self.job.logger.warning(f"Duplicate location {location_model.name}. {err}")
 
     def load_vendors(self):
         """Load manufacturers from Slurpit."""
@@ -274,9 +275,10 @@ class SlurpitAdapter(Adapter):
                     system_of_record="Slurpit",
                     last_synced_from_sor=datetime.today().date().isoformat(),
                 )
-                self.add(manufacturer)
+                manufacturer_model = self.add_flags(manufacturer)
+                self.add(manufacturer_model)
             except ObjectAlreadyExists as err:
-                self.job.logger.warning(f"Duplicate manufacturer {manufacturer.name}. {err}")
+                self.job.logger.warning(f"Duplicate manufacturer {manufacturer_model.name}. {err}")
 
     def load_device_types(self):
         """Load device types from Slurpit."""
@@ -290,10 +292,18 @@ class SlurpitAdapter(Adapter):
                     "system_of_record": "Slurpit",
                     "last_synced_from_sor": datetime.today().date().isoformat(),
                 }
-                model = self.device_type(**data)
-                self.add(model)
+                model = self.add_flags(self.device_type(**data))
             except ObjectAlreadyExists as err:
                 self.job.logger.warning(f"Duplicate device type {model.model}. {err}")
+
+    def add_flags(self, model):
+        """Add flags to the model."""
+        if not self.job.delete_records.get(model._modelname):
+            model.model_flags = DiffSyncModelFlags.SKIP_UNMATCHED_DST
+            print(model.model_flags)
+            return model
+        else:
+            return model
 
     def load_platforms(self):
         """Load platforms from Slurpit."""
@@ -307,10 +317,10 @@ class SlurpitAdapter(Adapter):
                     "system_of_record": "Slurpit",
                     "last_synced_from_sor": datetime.today().date().isoformat(),
                 }
-                model = self.platform(**platform_data)
-                self.add(model)
+                platform_model = self.add_flags(self.platform(**platform_data))
+                self.add(platform_model)
             except ObjectAlreadyExists as err:
-                self.job.logger.warning(f"Duplicate platform {model.name}. {err}")
+                self.job.logger.warning(f"Duplicate platform {platform_model.name}. {err}")
 
     def load_roles(self):
         """Load device roles."""
@@ -322,9 +332,10 @@ class SlurpitAdapter(Adapter):
                 system_of_record="Slurpit",
                 last_synced_from_sor=datetime.today().date().isoformat(),
             )
-            self.add(role)
+            role_model = self.add_flags(role)
+            self.add(role_model)
         except ObjectAlreadyExists as err:
-            self.job.logger.warning(f"Duplicate role {role.name}. {err}")
+            self.job.logger.warning(f"Duplicate role {role_model.name}. {err}")
 
     def load_devices(self):
         """Load devices from Slurpit."""
@@ -345,9 +356,10 @@ class SlurpitAdapter(Adapter):
                 }
                 if device.ipv4:
                     self.hostname_to_primary_ip[device.hostname] = device.ipv4
-                self.add(self.device(**data))
+                device_model = self.add_flags(self.device(**data))
+                self.add(device_model)
             except ObjectAlreadyExists as err:
-                self.job.logger.warning(f"Duplicate device {device.name}. {err}")
+                self.job.logger.warning(f"Duplicate device {device_model.name}. {err}")
 
     def load_interfaces(self):
         """Load interfaces from Slurpit."""
@@ -385,10 +397,10 @@ class SlurpitAdapter(Adapter):
                             }
                             if self.hostname_to_primary_ip.get(interface.get("hostname")) == ip_address.get("host"):
                                 interface_match_data["interface__device__primary_ip4__host"] = ip_address.get("host")
+                            ipassignment_model = self.add_flags(self.ipassignment(**interface_match_data))
+                            self.add(ipassignment_model)
 
-                            self.add(self.ipassignment(**interface_match_data))
-
-                    new_interface = self.interface(**data)
+                    new_interface = self.add_flags(self.interface(**data))
                     self.add(new_interface)
                     # dev.add_child(new_interface)
                 except ObjectNotFound:
@@ -416,12 +428,13 @@ class SlurpitAdapter(Adapter):
                         system_of_record="Slurpit",
                         last_synced_from_sor=datetime.today().date().isoformat(),
                     )
-                    self.add(new_item)
-                    dev.add_child(new_item)
+                    item_model = self.add_flags(new_item)
+                    self.add(item_model)
+                    dev.add_child(item_model)
                 except ObjectNotFound:
                     self.job.logger.warning(f"Device {item['hostname']} not found")
                 except ObjectAlreadyExists as err:
-                    self.job.logger.warning(f"Unable to load {new_item.name} as it appears to be a duplicate. {err}")
+                    self.job.logger.warning(f"Unable to load {item_model.name} as it appears to be a duplicate. {err}")
 
     def load_vlans(self):
         """Load VLANs from Slurpit."""
@@ -436,10 +449,10 @@ class SlurpitAdapter(Adapter):
                     "system_of_record": "Slurpit",
                     "last_synced_from_sor": datetime.today().date().isoformat(),
                 }
-                vlan = self.vlan(**data)
-                self.add(vlan)
+                vlan_model = self.add_flags(self.vlan(**data))
+                self.add(vlan_model)
             except ObjectAlreadyExists as err:
-                self.job.logger.warning(f"Duplicate VLAN {vlan.name}. {err}")
+                self.job.logger.warning(f"Duplicate VLAN {vlan_model.name}. {err}")
 
     def load_vrfs(self):
         """Load VRFs from Slurpit."""
@@ -453,10 +466,10 @@ class SlurpitAdapter(Adapter):
                     "system_of_record": "Slurpit",
                     "last_synced_from_sor": datetime.today().date().isoformat(),
                 }
-                new_vrf = self.vrf(**data)
-                self.add(new_vrf)
+                vrf_model = self.add_flags(self.vrf(**data))
+                self.add(vrf_model)
             except ObjectAlreadyExists as err:
-                self.job.logger.warning(f"Duplicate VRF {new_vrf.name}. {err}")
+                self.job.logger.warning(f"Duplicate VRF {vrf_model.name}. {err}")
 
     def load_prefixes(self):
         """Load prefixes from Slurpit."""
@@ -474,10 +487,10 @@ class SlurpitAdapter(Adapter):
                 }
                 if vrf_name := route.get("Vrf"):
                     data["vrfs"] = [{"name": vrf_name}]
-                prefix = self.prefix(**data)
-                self.add(prefix)
+                prefix_model = self.add_flags(self.prefix(**data))
+                self.add(prefix_model)
             except ObjectAlreadyExists as err:
-                self.job.logger.warning(f"Duplicate prefix {prefix.network}. {err}")
+                self.job.logger.warning(f"Duplicate prefix {prefix_model.network}. {err}")
 
     def load_ip_addresses(self):
         """Load IP addresses from Slurpit."""
@@ -524,8 +537,9 @@ class SlurpitAdapter(Adapter):
                         "system_of_record": "Slurpit",
                         "last_synced_from_sor": datetime.today().date().isoformat(),
                     }
-                    self.add(self.prefix(**prefix_data))
-                new_ip = self.ipaddress(**data)
+                    prefix_model = self.add_flags(self.prefix(**prefix_data))
+                    self.add(prefix_model)
+                new_ip = self.add_flags(self.ipaddress(**data))
                 self.add(new_ip)
 
                 try:
