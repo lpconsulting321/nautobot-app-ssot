@@ -3,6 +3,7 @@
 
 import asyncio
 import ipaddress
+import re
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
 
@@ -14,6 +15,7 @@ from nautobot.extras.models import Status
 from netutils.mac import mac_to_format
 from slurpit.models.site import Site as slurpit_site
 
+from nautobot_ssot.exceptions import JobException
 from nautobot_ssot.integrations.slurpit import constants
 from nautobot_ssot.integrations.slurpit.diffsync.models import (
     DeviceModel,
@@ -118,19 +120,18 @@ class SlurpitAdapter(Adapter):
 
     def unique_vendors(self):
         """Get unique vendors from the devices."""
-        devices = self.run_async(self.client.device.get_devices())
-        vendors = {device.brand for device in devices}
+        vendors = {device.brand for device in self.devices}
         return [{"brand": item} for item in vendors]
 
     def unique_device_type(self):
         """Get unique device types from the devices."""
-        devices = self.run_async(self.client.device.get_devices())
+        devices = self.devices
         device_types = {(device.brand, device.device_type, device.device_os) for device in devices}
         return [{"brand": item[0], "device_type": item[1], "device_os": item[2]} for item in device_types]
 
     def unique_platforms(self):
         """Get unique platforms from the devices."""
-        devices = self.run_async(self.client.device.get_devices())
+        devices = self.devices
         return {device.device_os: device.brand for device in devices}
 
     def filter_networks(self):
@@ -229,6 +230,8 @@ class SlurpitAdapter(Adapter):
             raise IndexError(f"No planning found for name: {planning_name}")
 
         search_data = {"planning_id": planning["id"], "unique_results": True, "latest": True}
+        if self.job.site_mapping:
+            search_data["hostnames"] = self.device_hostnames
         results = self.run_async(self.client.planning.search_plannings(search_data, limit=30000))
         return results if results else []
 
@@ -237,7 +240,7 @@ class SlurpitAdapter(Adapter):
         """Load locations from Slurpit."""
         _loc_type = LocationType.objects.get(name="Site")
         _status = Status.objects.get(name="Active")
-        sites = self.run_async(self.client.site.get_sites())
+        sites = self.matching_sites
         sites.append(unknown_location)
         for site in sites:
             try:
@@ -324,8 +327,7 @@ class SlurpitAdapter(Adapter):
 
     def load_devices(self):
         """Load devices from Slurpit."""
-        devices = self.run_async(self.client.device.get_devices())
-        for device in devices:
+        for device in self.devices:
             try:
                 data = {
                     "name": device.hostname,
@@ -538,9 +540,51 @@ class SlurpitAdapter(Adapter):
             except ObjectAlreadyExists as err:
                 self.job.logger.warning(f"Duplicate IP address {new_ip.host}. {err}")
 
+    def filter_by_site(self):
+        """Filter sites based on the site filter."""
+        self.matching_sites = []
+        devices = self.run_async(self.client.device.get_devices())
+        sites = self.run_async(self.client.site.get_sites())
+
+        # If no site filter, include all devices
+        if not self.job.site_mapping:
+            self.devices = devices
+            self.matching_sites = sites
+            return
+
+        # Compile regex patterns once
+        compiled_patterns = [re.compile(pattern, re.IGNORECASE) for pattern in self.job.site_mapping]
+
+        # Filter matching sites
+        matching_site_names = set()
+        for site in sites:
+            if any(pattern.match(site.sitename) for pattern in compiled_patterns):
+                self.matching_sites.append(site)
+                matching_site_names.add(site.sitename)
+                self.job.logger.debug(f"Site {site.sitename} mapped to {site.sitename}")
+
+        if not matching_site_names:
+            raise JobException(
+                message="No sites matched the provided site filter. Please check your site filter settings."
+            )
+
+        # Filter devices belonging to matching sites
+        self.devices = [device for device in devices if device.site in matching_site_names]
+
+        if not self.devices:
+            raise JobException(
+                message="No devices matched the provided site filter. Please check your site filter settings."
+            )
+
+    def get_hostnames(self):
+        """Get hostnames from the devices."""
+        self.device_hostnames = [device.hostname for device in self.devices]
+
     # Unified load function
     def load(self):
         """Load all data models."""
+        self.filter_by_site()
+        self.get_hostnames()
         self.load_locations()
         self.load_vendors()
         self.load_device_types()

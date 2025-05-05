@@ -1,6 +1,8 @@
 # pylint: disable=R0801
 """Slurpit DataSource job class."""
 
+from ast import literal_eval
+
 import slurpit
 from diffsync.enum import DiffSyncFlags
 from django.contrib.contenttypes.models import ContentType
@@ -8,7 +10,7 @@ from django.templatetags.static import static
 from django.urls import reverse
 from nautobot.dcim.models import Device, LocationType
 from nautobot.extras.choices import SecretsGroupAccessTypeChoices, SecretsGroupSecretTypeChoices
-from nautobot.extras.jobs import BooleanVar, Job, ObjectVar
+from nautobot.extras.jobs import BooleanVar, Job, ObjectVar, StringVar
 from nautobot.extras.models import ExternalIntegration
 from nautobot.ipam.models import Namespace
 
@@ -57,6 +59,13 @@ class SlurpitDataSource(DataSource, Job):  # pylint: disable=too-many-instance-a
         default=True,
         label="Sync tagged objects only",
         description="Only sync objects that have the 'SSoT Synced from Slurpit' Tag.",
+    )
+
+    site_filter = StringVar(
+        label="Slurpit Site Filter",
+        description="Slurpit Site filter to use when importing devices. ex: [('.*BCN.*', '.*-LDN')]",
+        default=[],
+        required=False,
     )
 
     kwargs = {}
@@ -122,6 +131,7 @@ class SlurpitDataSource(DataSource, Job):  # pylint: disable=too-many-instance-a
         site_loctype,
         namespace,
         ignore_prefixes,
+        site_filter,
         sync_slurpit_tagged_only,
         *args,
         **kwargs,
@@ -137,6 +147,7 @@ class SlurpitDataSource(DataSource, Job):  # pylint: disable=too-many-instance-a
         if not self.namespace:
             self.namespace = Namespace.objects.get(name="Global")
         self.ignore_prefixes = ignore_prefixes
+        self.site_mapping = literal_eval(site_filter)
 
         self.diffsync_flags |= DiffSyncFlags.SKIP_UNMATCHED_DST
 
