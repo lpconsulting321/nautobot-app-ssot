@@ -9,7 +9,7 @@ from django.templatetags.static import static
 from django.urls import reverse
 from nautobot.dcim.models import Device, LocationType
 from nautobot.extras.choices import SecretsGroupAccessTypeChoices, SecretsGroupSecretTypeChoices
-from nautobot.extras.jobs import BooleanVar, Job, ObjectVar, StringVar
+from nautobot.extras.jobs import BooleanVar, Job, MultiChoiceVar, ObjectVar, StringVar
 from nautobot.extras.models import ExternalIntegration
 from nautobot.ipam.models import Namespace
 
@@ -67,20 +67,26 @@ class SlurpitDataSource(DataSource, Job):  # pylint: disable=too-many-instance-a
         required=False,
     )
 
-    delete_location = BooleanVar(description="Delete locations from Nautobot if not present in Slurpit")
-    delete_manufacturer = BooleanVar(description="Delete manufacturers from Nautobot if not present in Slurpit")
-    delete_device_type = BooleanVar(description="Delete device types from Nautobot if not present in Slurpit")
-    delete_platform = BooleanVar(description="Delete platforms from Nautobot if not present in Slurpit")
-    delete_role = BooleanVar(description="Delete roles from Nautobot if not present in Slurpit")
-    delete_device = BooleanVar(description="Delete devices from Nautobot if not present in Slurpit")
-    delete_inventory_item = BooleanVar(description="Delete inventory items from Nautobot if not present in Slurpit")
-    delete_vlan = BooleanVar(description="Delete VLANs from Nautobot if not present in Slurpit")
-    delete_vrf = BooleanVar(description="Delete VRFs from Nautobot if not present in Slurpit")
-    delete_prefix = BooleanVar(description="Delete prefixes from Nautobot if not present in Slurpit")
-    delete_ipaddress = BooleanVar(description="Delete IP addresses from Nautobot if not present in Slurpit")
-    delete_interface = BooleanVar(description="Delete interfaces from Nautobot if not present in Slurpit")
-    delete_ipassignment = BooleanVar(description="Delete IP assignments from Nautobot if not present in Slurpit")
-
+    delete_records = MultiChoiceVar(
+        choices=(
+            ("location", "Location"),
+            ("manufacturer", "Manufacturer"),
+            ("device_type", "Device Type"),
+            ("platform", "Platform"),
+            ("role", "Role"),
+            ("device", "Device"),
+            ("inventory_item", "Inventory Item"),
+            ("vlan", "VLAN"),
+            ("vrf", "VRF"),
+            ("prefix", "Prefix"),
+            ("ipaddress", "IP Address"),
+            ("interface", "Interface"),
+            ("ipassignment", "IP Assignment"),
+        ),
+        description="Choose which records to delete from Nautobot if not present in Slurpit. Ctrl click to select multiple.",
+        label="Objects to delete",
+        required=False,
+    )
     kwargs = {}
 
     class Meta:
@@ -145,6 +151,7 @@ class SlurpitDataSource(DataSource, Job):  # pylint: disable=too-many-instance-a
         namespace,
         ignore_prefixes,
         site_filter,
+        delete_records,
         sync_slurpit_tagged_only,
         *args,
         **kwargs,
@@ -161,10 +168,7 @@ class SlurpitDataSource(DataSource, Job):  # pylint: disable=too-many-instance-a
             self.namespace = Namespace.objects.get(name="Global")
         self.ignore_prefixes = ignore_prefixes
         self.site_mapping = literal_eval(site_filter)
-        self.delete_records = {}
-        for k, v in kwargs.items():
-            if k.startswith("delete_"):
-                self.delete_records[k[7:]] = v
+        self.delete_records = delete_records
 
         self.kwargs = {
             "sync_slurpit_tagged_only": sync_slurpit_tagged_only,

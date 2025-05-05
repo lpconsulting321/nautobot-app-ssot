@@ -298,9 +298,8 @@ class SlurpitAdapter(Adapter):
 
     def add_flags(self, model):
         """Add flags to the model."""
-        if not self.job.delete_records.get(model._modelname):
+        if model._modelname not in self.job.delete_records:
             model.model_flags = DiffSyncModelFlags.SKIP_UNMATCHED_DST
-            print(model.model_flags)
             return model
         else:
             return model
